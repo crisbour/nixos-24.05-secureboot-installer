@@ -30,7 +30,7 @@ prompt(){
     QUESTION="${QUESTION} (y/n): "
   fi
   echo -n "${QUESTION}"
-  read CONTINUE
+  read -r CONTINUE
   CONTINUE=$(echo "${CONTINUE}" | awk '{print tolower($0)}')
   if [[ -z "${CONTINUE}" ]]; then
     CONTINUE=$(echo "${default}" | awk '{print tolower($0)}')
@@ -86,13 +86,13 @@ key_info(){
   created="${1}"
   if [[ "${created}" = "y" ]]; then
     echo "New SecureBoot keys generated"
-    echo "Copying new keys to /mnt/boot/keys"
-    cp -r /mnt/etc/secureboot/keys /mnt/boot
+    echo "Copying new keys to ${MNT_DIR}/boot/keys"
+    cp -r "${MNT_DIR}/etc/secureboot/keys" "${MNT_DIR}/boot"
     copied=$?
   else
     echo "Using default SecureBoot keys."
-    echo "Copying default keys to /mnt/boot/keys"
-    cp -r ./keys /mnt/boot
+    echo "Copying default keys to ${MNT_DIR}/boot/keys"
+    cp -r ./keys "${MNT_DIR}/boot"
     copied=$?
   fi
 
@@ -111,16 +111,16 @@ cleanup(){
   reason="$1"
   echo "Cleaning up ${reason}..."
   echo ""
-  if [[ $(mount | grep $BOOT_DISK) = 0 ]]; then
+  if [[ $(mount | grep "$BOOT_DISK") = 0 ]]; then
     echo "Unmounting ${BOOT_DISK}..."
-    umount $BOOT_DISK
+    umount "$BOOT_DISK"
     echo "Done."
     echo ""
   fi
 
-  if [[ $(mount | grep $ROOT_DISK = 0) ]]; then
+  if [[ $(mount | grep "$ROOT_DISK" = 0) ]]; then
     echo "Unmounting ${ROOT_DISK}..."
-    umount $ROOT_DISK
+    umount "$ROOT_DISK"
     echo "Done."
     echo ""
   fi
@@ -192,34 +192,30 @@ fi
 # Format the partitions
 sleep 5
 
-OG_ROOT_UUID=$(get_uuid ${DISK} 2)
-OG_BOOT_UUID=$(get_uuid ${DISK} 1)
+OG_ROOT_UUID=$(get_uuid "${DISK}" 2)
+OG_BOOT_UUID=$(get_uuid "${DISK}" 1)
 
 # /boot:
-mkfs.fat -F 32 "${BOOT_DISK}"
-
-if [[ "$?" != "0" ]]; then
+if ! mkfs.fat -F 32 "${BOOT_DISK}"; then
   echo "Error making FAT32 Filesystem on ${BOOT_DISK}.  Installation can not continue."
   cleanup "after failure"
   exit 4
 fi
 
 # /:
-mkfs.ext4 "$ROOT_DISK"
-
-if [[ "$?" != "0" ]]; then
+if ! mkfs.ext4 "$ROOT_DISK"; then
   echo "Error making ext4 Filesystem on ${BOOT_DISK}.  Installation can not continue."
   cleanup "after failure"
   exit 5
 fi
 
-ROOT_UUID=$(get_uuid ${DISK} 2)
-BOOT_UUID=$(get_uuid ${DISK} 1)
+ROOT_UUID=$(get_uuid "${DISK}" 2)
+BOOT_UUID=$(get_uuid "${DISK}" 1)
 
 if [[ "${ROOT_UUID}" = "${OG_ROOT_UUID}" ]] || [[ "${BOOT_UUID}" = "${OG_BOOT_UUID}" ]]; then
   sleep 5
-  ROOT_UUID=$(get_uuid ${DISK} 2)
-  BOOT_UUID=$(get_uuid ${DISK} 1)
+  ROOT_UUID=$(get_uuid "${DISK}" 2)
+  BOOT_UUID=$(get_uuid "${DISK}" 1)
 fi
 
 ROOT_UUID=$(ls -l /dev/disk/by-uuid | grep $(echo $DISK | sed 's/\/dev\///')${PART_MRKR}2 | awk '{print $9}')
@@ -233,43 +229,42 @@ echo ""
 prompt "Continue?" "n" "y" "y"
 
 
+# Select mount directory
+get_variable "What mount dir would you like to use?" "${MNT_DIR}"
+MNT_DIR="${answer}"
+
+
 # Mount partitions
 # Mount /
-mount "/dev/disk/by-uuid/${ROOT_UUID}" /mnt
-
-if [[ "$?" != "0" ]]; then
-  echo "Error mounting ${ROOT_UUID} at /mnt.  Installation can not continue."
+if ! mount "/dev/disk/by-uuid/${ROOT_UUID}" "$MNT_DIR"; then
+  echo "Error mounting ${ROOT_UUID} at $MNT_DIR.  Installation can not continue."
   cleanup "after failure"
   exit 6
 fi
 
 # Create mount points
-mkdir /mnt/boot
-
-if [[ "$?" != "0" ]]; then
-  echo "Error creating /mnt/boot mountpoint.  Installation can not continue."
+if ! mkdir "${MNT_DIR}/boot"; then
+  echo "Error creating ${MNT_DIR}/boot mountpoint.  Installation can not continue."
   cleanup "after failure"
   exit 7
 fi
 
-mount "/dev/disk/by-uuid/${BOOT_UUID}" /mnt/boot
-
-if [[ "$?" != "0" ]]; then
-  echo "Error mounting ${BOOT_UUID} at /mnt/boot.  Installation can not continue."
+if ! mount "/dev/disk/by-uuid/${BOOT_UUID}" "${MNT_DIR}/boot"; then
+  echo "Error mounting ${BOOT_UUID} at ${MNT_DIR}/boot.  Installation can not continue."
   cleanup "after failure"
   exit 8
 fi
 
 # Copy configuration to /etc/nixos
 echo ""
-echo "Creating /mnt/etc/nixos and copying config files into it."
+echo "Creating ${MNT_DIR}/etc/nixos and copying config files into it."
 echo ""
 
-mkdir -p /mnt/etc/nixos
-cp -r nixos/* /mnt/etc/nixos/
+mkdir -p "${MNT_DIR}/etc/nixos"
+cp -r nixos/* "${MNT_DIR}/etc/nixos/"
 sleep 10
 if [[ "$?" != "0" ]]; then
-  echo "Error copying configuration to /mnt/etc/nixos.  Installation can not continue."
+  echo "Error copying configuration to ${MNT_DIR}/etc/nixos.  Installation can not continue."
   cleanup "after failure"
   exit 9
 fi
@@ -278,10 +273,10 @@ echo "Done."
 echo ""
 echo "Modifying hardware-configration.nix to reference our ROOT and BOOT partition UUID's."
 echo ""
-sed -i -e 's/ROOT_UUID/'${ROOT_UUID}'/' /mnt/etc/nixos/hardware-configuration.nix
+sed -i -e 's/ROOT_UUID/'${ROOT_UUID}'/' "${MNT_DIR}/etc/nixos/hardware-configuration.nix"
 ROOT_UUID_REPLACE=$?
 
-sed -i -e 's/BOOT_UUID/'${BOOT_UUID}'/' /mnt/etc/nixos/hardware-configuration.nix
+sed -i -e 's/BOOT_UUID/'${BOOT_UUID}'/' "${MNT_DIR}/etc/nixos/hardware-configuration.nix"
 BOOT_UUID_REPLACE=$?
 
 UUID_REPLACE=$(($ROOT_UUID_REPLACE + $BOOT_UUID_REPLACE))
@@ -298,7 +293,7 @@ echo "Done."
 prompt "Use Default Boot Keys?" "y" "y" "n"
 SEC_BOOT="${CONTINUE}"
 if [[ "${SEC_BOOT}" = "n" ]]; then
-  sbctl create-keys -d /mnt/etc/secureboot -e /mnt/etc/secureboot/keys
+  sbctl create-keys -d "${MNT_DIR}/etc/secureboot" -e "${MNT_DIR}/etc/secureboot/keys"
   key_info "y"
   if [[ "$?" != "0" ]]; then
     echo "Error generating new SecureBoot keys.  Installation can not continue."
@@ -314,13 +309,13 @@ disk_info
 uuid_info
 
 # prompt <question> <default> <double_check> <exit>
-prompt "Perform nixos-install --root /mnt ?" "n" "y" "y"
+prompt "Perform nixos-install --root $MNT_DIR ?" "n" "y" "y"
 
 # Install the system
 echo "Performing Installation"
 echo ""
 
-nixos-install --flake nixos#iso --root /mnt
+nixos-install --flake nixos#iso --root "$MNT_DIR"
 success=$?
 
 if [ "${success}" = "0" ]; then
@@ -338,7 +333,7 @@ if [ "${success}" = "0" ]; then
   echo ""
   echo "You may need to enroll the keys located on ${DISK}${PART_MRKR}1 in your UEFI Firmare"
 else
-  echo "Error running 'nix-install --root /mnt'.  Installation Failed."
+  echo "Error running 'nix-install --root $MNT_DIR'.  Installation Failed."
   cleanup "after failure"
   exit 11
 fi
