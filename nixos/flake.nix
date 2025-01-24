@@ -7,37 +7,38 @@
       url = "github:nix-community/lanzaboote";
       inputs.nixpkgs.follows="nixpkgs";
     };
-    flake-utils.url = "github:numtide/flake-utils";
   };
 
   outputs =
-    { self, nixpkgs }:
+    { self, nixpkgs, lanzaboote }@inputs:
     let
-      name = "";
+      inherit (self) outputs;
+
+      # TODO: Is this necessary? Perhaps for accessing home-manager.lib.homeManagerConfiguration easier
+      lib = nixpkgs.lib;
+
       systems = [
         "x86_64-darwin"
         "aarch64-darwin"
         "x86_64-linux"
         "aarch64-linux"
       ];
-      eachSystem =
-        with nixpkgs.lib;
-        f: foldAttrs mergeAttrs { } (map (s: mapAttrs (_: v: { ${s} = v; }) (f s)) systems);
-    in
-    eachSystem (
-      system:
-      let
-        pkgs = nixpkgs.legacyPackages.${system};
-      in
-      {
-        packages = {
-          default = self.packages.${system}.${name};
-          ${name} = pkgs.hello;
-        };
 
-        nixosConfigurations.iso = nixpkgs.lib.nixosSystem {
-          modules = [./configuration.nix];
+      forEachSystem = f: lib.genAttrs systems (system: f pkgsFor.${system});
+      pkgsFor = lib.genAttrs systems (system: import nixpkgs {
+        inherit system;
+        config = {
+          allowUnfree = true;
         };
-      }
-    );
+      });
+    in
+    {
+      inherit lib;
+      #packages  = forEachSystem (pkgs: import ./pkgs { inherit pkgs inputs; });
+
+      nixosConfigurations.iso = nixpkgs.lib.nixosSystem {
+        modules = [./configuration.nix];
+        specialArgs = { inherit inputs; };
+      };
+    };
 }

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Installs NixOS with btrfs
 
+MNT_DIR="/mnt"
+
 # Define Functions
 check_user(){
   user=$(whoami)
@@ -315,7 +317,7 @@ prompt "Perform nixos-install --root $MNT_DIR ?" "n" "y" "y"
 echo "Performing Installation"
 echo ""
 
-nixos-install --flake nixos#iso --root "$MNT_DIR"
+nixos-install --flake ./nixos#iso --root "$MNT_DIR"
 success=$?
 
 if [ "${success}" = "0" ]; then

@@ -1,7 +1,7 @@
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, inputs, ... }:
 let
   sources = import ./nix/sources.nix;
-  lanzaboote = import sources.lanzaboote;
+  lanzaboote = import inputs.lanzaboote;
 in
 {
 
@@ -19,7 +19,7 @@ in
   boot.lanzaboote = {
     enable = true;
     pkiBundle = "/etc/secureboot";
-  };  
+  };
 
   # Set your time zone.
   time.timeZone = "America/Anchorage";
