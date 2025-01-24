@@ -9,6 +9,5 @@
      nano # Why would I ever want vim to touch my system :)
      wget
      sbctl
-     niv
    ];
 }

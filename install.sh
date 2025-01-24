@@ -320,7 +320,7 @@ prompt "Perform nixos-install --root /mnt ?" "n" "y" "y"
 echo "Performing Installation"
 echo ""
 
-nixos-install --root /mnt
+nixos-install --flake nixos#iso --root /mnt
 success=$?
 
 if [ "${success}" = "0" ]; then
